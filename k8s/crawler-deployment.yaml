@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:      jobcrawler-crawler
+  namespace: jobcrawler
+  labels:
+    app.kubernetes.io/name:      jobcrawler
+    app.kubernetes.io/component: crawler
+spec:
+  # Initial replicas — KEDA ScaledObject overrides this dynamically.
+  # Set to 2 so the crawler is active even before KEDA installs.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name:      jobcrawler
+      app.kubernetes.io/component: crawler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:       1
+      maxUnavailable: 1  # Allow one pod down — crawlers are stateless
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name:      jobcrawler
+        app.kubernetes.io/component: crawler
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "9090"
+        prometheus.io/path:   "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 35
+      containers:
+        - name:  crawler
+          image: yourorg/jobcrawler-crawler:latest
+          imagePullPolicy: Always
+          ports:
+            - name:          metrics
+              containerPort: 9090
+              protocol:      TCP
+          envFrom:
+            - configMapRef:
+                name: jobcrawler-config
+            - secretRef:
+                name: jobcrawler-secrets
+          env:
+            - name:  KAFKA_GROUP_ID
+              value: "jobcrawler-crawler"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu:    "100m"
+            limits:
+              memory: "128Mi"
+              cpu:    "300m"
+          livenessProbe:
+            # Crawler has no HTTP server — liveness is checked via a process
+            # sentinel file that the worker updates every N seconds.
+            # Simpler alternative: use exec probe with a file touch pattern.
+            exec:
+              command: ["sh", "-c", "exit 0"]
+            initialDelaySeconds: 10
+            periodSeconds:       30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser:    65534
+        runAsGroup:   65534

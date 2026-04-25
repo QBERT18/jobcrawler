@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name:      jobcrawler-config
+  namespace: jobcrawler
+  labels:
+    app.kubernetes.io/name: jobcrawler
+data:
+  # Kafka — comma-separated broker list
+  KAFKA_BROKERS: "kafka-headless.kafka.svc.cluster.local:9092"
+
+  # Redis — Sentinel or standalone address
+  REDIS_ADDR: "redis-master.redis.svc.cluster.local:6379"
+  REDIS_DB:   "0"
+
+  # Elasticsearch — comma-separated node addresses
+  ES_ADDRESSES: "http://elasticsearch-master.elastic.svc.cluster.local:9200"
+  ES_INDEX_NAME: "jobs"
+
+  # API server
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8080"
+
+  # Observability
+  LOG_LEVEL:     "info"
+  ENV:           "production"
+  OTLP_ENDPOINT: "tempo.monitoring.svc.cluster.local:4318"
+
+  # Crawler behaviour
+  CRAWLER_RATE_LIMIT_RPS: "0.5"
+  CRAWLER_MAX_RETRIES:    "3"

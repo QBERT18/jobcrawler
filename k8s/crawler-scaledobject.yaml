@@ -1,0 +1,48 @@
+# KEDA ScaledObject — scales Crawler workers based on Kafka consumer lag.
+#
+# Why KEDA instead of HPA + CPU?
+#   CPU utilisation is a lagging indicator for Kafka consumers. A crawler
+#   sitting idle waiting for messages has low CPU but may have a growing
+#   lag queue. KEDA reads the Kafka consumer group lag directly — a far
+#   more accurate signal for "do we need more workers?"
+#
+# Scaling logic:
+#   currentReplicas = ceil(lag / lagThreshold)
+#   lag=0   → 0 replicas (KEDA can scale to zero)
+#   lag=100 → 1 replica
+#   lag=500 → 5 replicas
+#   lag>1000 → capped at maxReplicaCount=10
+#
+# Prerequisites: KEDA installed in the cluster.
+#   helm repo add kedacore https://kedacore.github.io/charts
+#   helm install keda kedacore/keda --namespace keda --create-namespace
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name:      jobcrawler-crawler-scaledobject
+  namespace: jobcrawler
+  labels:
+    app.kubernetes.io/name:      jobcrawler
+    app.kubernetes.io/component: crawler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind:       Deployment
+    name:       jobcrawler-crawler
+  # Keep at least 1 crawler running even when lag=0.
+  # Set to 0 to enable scale-to-zero (cold start latency applies).
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  # Wait 60s after the last scale event before scaling again.
+  # Prevents thrashing when lag oscillates around the threshold.
+  cooldownPeriod: 60
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers:  "kafka-headless.kafka.svc.cluster.local:9092"
+        consumerGroup:     "jobcrawler-crawler"
+        topic:             "crawl.queue"
+        # Scale up when each replica would have more than 100 messages to process.
+        lagThreshold:      "100"
+        # Offset reset policy for new consumer groups.
+        offsetResetPolicy: "latest"

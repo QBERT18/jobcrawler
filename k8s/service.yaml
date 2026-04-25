@@ -1,0 +1,50 @@
+# ClusterIP Service — internal cluster access to the API
+# Used by ingress controllers and other services within the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name:      jobcrawler-api
+  namespace: jobcrawler
+  labels:
+    app.kubernetes.io/name:      jobcrawler
+    app.kubernetes.io/component: api
+spec:
+  type:     ClusterIP
+  selector:
+    app.kubernetes.io/name:      jobcrawler
+    app.kubernetes.io/component: api
+  ports:
+    - name:       http
+      port:       80
+      targetPort: 8080
+      protocol:   TCP
+
+---
+# LoadBalancer Service — external access (for cloud providers: AWS ELB, GCP LB)
+# In production, prefer an Ingress + cert-manager for TLS termination.
+# Use this only for quick testing or when an Ingress controller is unavailable.
+apiVersion: v1
+kind: Service
+metadata:
+  name:      jobcrawler-api-external
+  namespace: jobcrawler
+  labels:
+    app.kubernetes.io/name:      jobcrawler
+    app.kubernetes.io/component: api
+  annotations:
+    # AWS: provision an NLB instead of a CLB
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type:     LoadBalancer
+  selector:
+    app.kubernetes.io/name:      jobcrawler
+    app.kubernetes.io/component: api
+  ports:
+    - name:       http
+      port:       80
+      targetPort: 8080
+      protocol:   TCP
+    - name:       https
+      port:       443
+      targetPort: 8080
+      protocol:   TCP

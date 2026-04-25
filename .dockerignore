@@ -1,0 +1,39 @@
+# Version control
+.git
+.gitignore
+
+# Documentation — never needed in an image
+**/*.md
+LICENSE
+
+# Local development
+.env
+.env.*
+tmp/
+*.log
+
+# Go artifacts — rebuilt inside Docker
+vendor/
+bin/
+
+# Docker files themselves — no need to COPY into images
+docker/
+
+# Test files — not compiled into production binaries
+*_test.go
+testdata/
+coverage.txt
+coverage.html
+
+# IDE / editor metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Kubernetes manifests — not needed inside containers
+k8s/
+
+# CI configuration
+.github/

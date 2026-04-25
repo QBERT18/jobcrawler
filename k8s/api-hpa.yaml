@@ -1,0 +1,48 @@
+# HorizontalPodAutoscaler for the API — scales on CPU utilisation.
+# When average CPU across all API pods exceeds 70%, new pods are added.
+# Scale-down is conservative (stabilisationWindow: 300s) to prevent
+# thrashing during traffic spikes.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name:      jobcrawler-api-hpa
+  namespace: jobcrawler
+  labels:
+    app.kubernetes.io/name:      jobcrawler
+    app.kubernetes.io/component: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind:       Deployment
+    name:       jobcrawler-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type:               Utilization
+          averageUtilization: 70
+    # Also scale on memory to prevent OOM during large search responses.
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type:               Utilization
+          averageUtilization: 80
+  behavior:
+    # Scale up quickly on load spikes.
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type:          Pods
+          value:         2
+          periodSeconds: 60
+    # Scale down slowly to avoid removing pods during brief traffic dips.
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type:          Pods
+          value:         1
+          periodSeconds: 120
