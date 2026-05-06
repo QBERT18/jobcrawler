@@ -54,6 +54,14 @@ func main() {
 	})
 	defer redisClient.Close()
 
+	// ── Kafka topic provisioning ──────────────────────────────────────────────
+	// Auto-creation races the first publish for jobs.processed; provision
+	// explicitly so the producer's metadata cache never sees a negative result.
+	if err := jobkafka.CreateTopics(cfg.Kafka.Brokers); err != nil {
+		logger.Error("kafka topic provisioning failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
 	// ── Kafka ─────────────────────────────────────────────────────────────────
 	consumer := jobkafka.NewConsumer(
 		cfg.Kafka.Brokers,

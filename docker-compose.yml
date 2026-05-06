@@ -11,7 +11,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: jobcrawler-postgres
-    restart: unless-stopped
+    restart: "no"
     environment:
       POSTGRES_DB:       jobcrawler
       POSTGRES_USER:     jobcrawler
@@ -32,7 +32,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: jobcrawler-redis
-    restart: unless-stopped
+    restart: "no"
     command: >
       redis-server
       --maxmemory 256mb
@@ -53,7 +53,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: jobcrawler-zookeeper
-    restart: unless-stopped
+    restart: "no"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME:   2000
@@ -79,7 +79,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: jobcrawler-kafka
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -112,7 +112,7 @@ services:
   elasticsearch:
     image: elasticsearch:8.11.0
     container_name: jobcrawler-elasticsearch
-    restart: unless-stopped
+    restart: "no"
     environment:
       discovery.type:            single-node
       xpack.security.enabled:    "false"
@@ -140,7 +140,7 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: jobcrawler-kafka-ui
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "8081:8080"
     environment:
@@ -157,7 +157,7 @@ services:
   kibana:
     image: kibana:8.11.0
     container_name: jobcrawler-kibana
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "5601:5601"
     environment:
@@ -171,7 +171,7 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: jobcrawler-redisinsight
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "5540:5540"
     depends_on:
@@ -187,7 +187,7 @@ services:
       context:    .
       dockerfile: docker/api.Dockerfile
     container_name: jobcrawler-api
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "8080:8080"
     environment:
@@ -222,9 +222,8 @@ services:
     build:
       context:    .
       dockerfile: docker/crawler.Dockerfile
-    restart: unless-stopped
-    deploy:
-      replicas: 2
+    container_name: jobcrawler-crawler
+    restart: "no"
     environment:
       ENV:                     development
       DATABASE_DSN:            postgres://jobcrawler:secret@postgres:5432/jobcrawler?sslmode=disable
@@ -249,7 +248,7 @@ services:
       context:    .
       dockerfile: docker/processor.Dockerfile
     container_name: jobcrawler-processor
-    restart: unless-stopped
+    restart: "no"
     environment:
       ENV:              development
       DATABASE_DSN:     postgres://jobcrawler:secret@postgres:5432/jobcrawler?sslmode=disable
@@ -272,7 +271,7 @@ services:
       context:    .
       dockerfile: docker/scheduler.Dockerfile
     container_name: jobcrawler-scheduler
-    restart: unless-stopped
+    restart: "no"
     environment:
       ENV:              development
       DATABASE_DSN:     postgres://jobcrawler:secret@postgres:5432/jobcrawler?sslmode=disable
