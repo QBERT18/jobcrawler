@@ -1,0 +1,263 @@
+# JobCrawler — production / vServer stack
+#
+# Trimmed for a small self-hosted box: no Elasticsearch, Kibana, Kafka-UI or
+# RedisInsight (search is Postgres-backed in Phase 1). App images are pulled
+# prebuilt from GHCR (built by .github/workflows/build-and-push.yml), and
+# Watchtower auto-updates them on every push to main. ngrok exposes the API +
+# embedded frontend publicly.
+#
+# Launch:  docker compose -f docker-compose.prod.yml --env-file .env up -d
+# See SERVER_SETUP.md for the full walkthrough.
+
+name: jobcrawler
+
+# Reusable env anchor for the Postgres DSN (depends on POSTGRES_PASSWORD).
+x-database-dsn: &database-dsn
+  DATABASE_DSN: postgres://jobcrawler:${POSTGRES_PASSWORD:-change-me}@postgres:5432/jobcrawler?sslmode=disable
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: jobcrawler-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       jobcrawler
+      POSTGRES_USER:     jobcrawler
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobcrawler -d jobcrawler"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 512m
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: jobcrawler-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 320m
+    networks:
+      - backend
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: jobcrawler-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME:   2000
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=ruok,stat,conf,isro"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost 2181 | grep -q imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 384m
+    networks:
+      - backend
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: jobcrawler-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID:                        1
+      KAFKA_ZOOKEEPER_CONNECT:                zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS:             PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:   PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME:       PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE:        "true"
+      # Lower than dev (24h) to save disk on a small box — the queue is transient.
+      KAFKA_LOG_RETENTION_HOURS:              6
+      KAFKA_LOG_SEGMENT_BYTES:                1073741824
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    mem_limit: 768m
+    networks:
+      - backend
+
+  # ── Application services (prebuilt images from GHCR) ──────────────────────────
+
+  jobcrawler-api:
+    image: ghcr.io/qbert18/jobcrawler-api:latest
+    container_name: jobcrawler-api
+    restart: unless-stopped
+    ports:
+      # Bind to localhost only — public access goes through ngrok, not the host port.
+      - "127.0.0.1:8080:8080"
+    environment:
+      ENV:           production
+      SERVER_HOST:   "0.0.0.0"
+      SERVER_PORT:   "8080"
+      <<: *database-dsn
+      REDIS_ADDR:    redis:6379
+      KAFKA_BROKERS: kafka:29092
+      OTLP_ENDPOINT: ""
+      LOG_LEVEL:     info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    mem_limit: 128m
+    networks:
+      - backend
+
+  jobcrawler-crawler:
+    image: ghcr.io/qbert18/jobcrawler-crawler:latest
+    container_name: jobcrawler-crawler
+    restart: unless-stopped
+    environment:
+      ENV:            production
+      <<: *database-dsn
+      REDIS_ADDR:     redis:6379
+      KAFKA_BROKERS:  kafka:29092
+      KAFKA_GROUP_ID: jobcrawler-crawler
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    mem_limit: 192m
+    networks:
+      - backend
+
+  jobcrawler-processor:
+    image: ghcr.io/qbert18/jobcrawler-processor:latest
+    container_name: jobcrawler-processor
+    restart: unless-stopped
+    environment:
+      ENV:            production
+      <<: *database-dsn
+      REDIS_ADDR:     redis:6379
+      KAFKA_BROKERS:  kafka:29092
+      KAFKA_GROUP_ID: jobcrawler-processor
+      # Storage-growth limits (see .env / SERVER_SETUP.md).
+      MAX_TOTAL_JOBS:         ${MAX_TOTAL_JOBS:-50000}
+      CLEANUP_ENABLED:        ${CLEANUP_ENABLED:-true}
+      CLEANUP_SCHEDULE:       ${CLEANUP_SCHEDULE:-0 3 * * *}
+      CLEANUP_RETENTION_DAYS: ${CLEANUP_RETENTION_DAYS:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    mem_limit: 192m
+    networks:
+      - backend
+
+  jobcrawler-scheduler:
+    image: ghcr.io/qbert18/jobcrawler-scheduler:latest
+    container_name: jobcrawler-scheduler
+    restart: unless-stopped
+    environment:
+      ENV:           production
+      <<: *database-dsn
+      REDIS_ADDR:    redis:6379
+      KAFKA_BROKERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    mem_limit: 96m
+    networks:
+      - backend
+
+  # ── Public ingress ────────────────────────────────────────────────────────────
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: jobcrawler-ngrok
+    restart: unless-stopped
+    command: ["http", "jobcrawler-api:8080", "--log=stdout"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    ports:
+      # Local inspector (tunnel URL, request log) — localhost only.
+      - "127.0.0.1:4040:4040"
+    depends_on:
+      - jobcrawler-api
+    networks:
+      - backend
+
+  # ── Auto-update ────────────────────────────────────────────────────────────────
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: jobcrawler-watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_CLEANUP:       "true"   # remove old images after updating
+      WATCHTOWER_POLL_INTERVAL: "60"     # check GHCR every 60s
+      WATCHTOWER_LABEL_ENABLE:  "true"   # only watch labelled containers (the 4 app services)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # For private GHCR images: run `docker login ghcr.io` on the host first so
+      # this credentials file exists. Public packages don't need it (harmless if absent).
+      - ${HOME}/.docker/config.json:/config.json:ro
+    networks:
+      - backend
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  backend:
+    driver: bridge

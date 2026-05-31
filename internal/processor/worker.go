@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
+	"time"
 
 	"github.com/applytude/jobcrawler/internal/crawler"
 	"github.com/applytude/jobcrawler/internal/domain"
@@ -13,6 +15,11 @@ import (
 	jobkafka "github.com/applytude/jobcrawler/pkg/kafka"
 	"github.com/segmentio/kafka-go"
 )
+
+// countRefreshInterval is how often the worker re-syncs its in-memory job
+// counter from the database, so the retention cron lowering the count (and the
+// drift from upsert-updates) is reflected in cap enforcement.
+const countRefreshInterval = 60 * time.Second
 
 // ProcessorWorker consumes RawCrawlResult messages from jobs.raw,
 // parses + normalises + deduplicates them, persists to PostgreSQL,
@@ -26,9 +33,17 @@ type ProcessorWorker struct {
 	registry     *crawler.SourceRegistry
 	alertMatcher *AlertMatcher // nil-safe: alerts are skipped if not wired
 	log          *slog.Logger
+
+	// maxTotalJobs is the hard cap on stored jobs (0 = unlimited). When the live
+	// counter reaches it, inserts are paused (soft, self-healing — see processMessage).
+	maxTotalJobs int64
+	// jobCount is the live approximate count of stored jobs, seeded from the DB
+	// and periodically re-synced (see startCountRefresher).
+	jobCount atomic.Int64
 }
 
 // NewProcessorWorker creates a ProcessorWorker with all required dependencies.
+// maxTotalJobs caps the number of stored jobs (0 = unlimited).
 func NewProcessorWorker(
 	reader jobkafka.KafkaReader,
 	producer jobkafka.KafkaProducer,
@@ -37,6 +52,7 @@ func NewProcessorWorker(
 	normalizer *Normalizer,
 	registry *crawler.SourceRegistry,
 	alertMatcher *AlertMatcher,
+	maxTotalJobs int64,
 	log *slog.Logger,
 ) *ProcessorWorker {
 	return &ProcessorWorker{
@@ -47,6 +63,7 @@ func NewProcessorWorker(
 		normalizer:   normalizer,
 		registry:     registry,
 		alertMatcher: alertMatcher,
+		maxTotalJobs: maxTotalJobs,
 		log:          log,
 	}
 }
@@ -54,6 +71,15 @@ func NewProcessorWorker(
 // Start is the main consumer loop. Blocks until ctx is cancelled.
 func (w *ProcessorWorker) Start(ctx context.Context) {
 	w.log.InfoContext(ctx, "processor worker started")
+
+	if w.maxTotalJobs > 0 {
+		w.refreshCount(ctx)
+		go w.startCountRefresher(ctx)
+		w.log.InfoContext(ctx, "job cap enforced",
+			slog.Int64("max_total_jobs", w.maxTotalJobs),
+			slog.Int64("current", w.jobCount.Load()),
+		)
+	}
 
 	for {
 		msg, err := w.reader.FetchMessage(ctx)
@@ -155,10 +181,29 @@ func (w *ProcessorWorker) processMessage(ctx context.Context, msg kafka.Message)
 	}
 
 	// ── 6. Persist ────────────────────────────────────────────────────────────
+	// Hard cap: pause inserts once the stored-job count reaches the limit. The
+	// offset is still committed (via the deferred commit) so the queue drains
+	// rather than backing up. This is self-healing — once the retention cron
+	// drops the count below the cap, inserts resume on the next refresh.
+	if w.atCap() {
+		log.WarnContext(ctx, "job cap reached — skipping insert",
+			slog.Int64("max_total_jobs", w.maxTotalJobs),
+			slog.Int64("current", w.jobCount.Load()),
+		)
+		return
+	}
+
 	if err := w.repo.Upsert(ctx, job); err != nil {
 		log.ErrorContext(ctx, "upsert failed", slog.String("error", err.Error()))
 		PublishToDLQ(ctx, w.producer, msg, fmt.Errorf("upsert: %w", err))
 		return
+	}
+
+	// Optimistically bump the live counter. Upsert may have been an update
+	// rather than an insert, so this can over-count; the periodic refresh from
+	// the DB corrects any drift.
+	if w.maxTotalJobs > 0 {
+		w.jobCount.Add(1)
 	}
 
 	log.InfoContext(ctx, "job persisted",
@@ -203,6 +248,37 @@ func (w *ProcessorWorker) commit(ctx context.Context, msg kafka.Message) {
 			slog.Int64("offset", msg.Offset),
 			slog.String("error", err.Error()),
 		)
+	}
+}
+
+// atCap reports whether the hard job cap is enabled and has been reached.
+func (w *ProcessorWorker) atCap() bool {
+	return w.maxTotalJobs > 0 && w.jobCount.Load() >= w.maxTotalJobs
+}
+
+// refreshCount re-syncs the in-memory job counter from the database.
+func (w *ProcessorWorker) refreshCount(ctx context.Context) {
+	n, err := w.repo.Count(ctx)
+	if err != nil {
+		w.log.WarnContext(ctx, "job count refresh failed — keeping previous value",
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	w.jobCount.Store(n)
+}
+
+// startCountRefresher periodically re-syncs the job counter until ctx is done.
+func (w *ProcessorWorker) startCountRefresher(ctx context.Context) {
+	t := time.NewTicker(countRefreshInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			w.refreshCount(ctx)
+		}
 	}
 }
 
