@@ -301,6 +301,29 @@ func (r *PostgresJobRepo) GetStats(ctx context.Context) (*domain.JobStats, error
 	return stats, nil
 }
 
+// Count returns the total number of rows in the jobs table.
+func (r *PostgresJobRepo) Count(ctx context.Context) (int64, error) {
+	var n int64
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM jobs").Scan(&n); err != nil {
+		return 0, fmt.Errorf("count jobs: %w", err)
+	}
+	return n, nil
+}
+
+// DeleteOlderThan removes jobs whose created_at is before cutoff and returns the
+// number of rows deleted. Backed by idx_jobs_created_at (migration 000003).
+func (r *PostgresJobRepo) DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx, "DELETE FROM jobs WHERE created_at < $1", cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("delete old jobs: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("delete old jobs rows affected: %w", err)
+	}
+	return n, nil
+}
+
 // ── Scan helpers ──────────────────────────────────────────────────────────────
 
 type scanner interface {

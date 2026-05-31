@@ -9,6 +9,7 @@ import (
 
 	"github.com/applytude/jobcrawler/config"
 	"github.com/applytude/jobcrawler/internal/crawler"
+	"github.com/applytude/jobcrawler/internal/janitor"
 	"github.com/applytude/jobcrawler/internal/processor"
 	"github.com/applytude/jobcrawler/internal/repository/postgres"
 	"github.com/applytude/jobcrawler/pkg/database"
@@ -88,11 +89,16 @@ func main() {
 		normalizer,
 		registry,
 		nil,
+		cfg.Processor.MaxTotalJobs,
 		logger,
 	)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	// Retention cleanup cron — runs alongside the consumer loop, sharing the
+	// processor's DB connection. Keeps the jobs table bounded over time.
+	go janitor.New(jobRepo, cfg.Processor, logger).Start(ctx)
 
 	logger.Info("processor worker starting",
 		slog.Any("brokers", cfg.Kafka.Brokers),

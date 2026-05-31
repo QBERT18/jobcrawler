@@ -11,6 +11,7 @@ type Config struct {
 	Kafka         KafkaConfig         `mapstructure:",squash"`
 	Elasticsearch ElasticsearchConfig `mapstructure:",squash"`
 	Crawler       CrawlerConfig       `mapstructure:",squash"`
+	Processor     ProcessorConfig     `mapstructure:",squash"`
 }
 
 // ServerConfig holds HTTP server settings for the API binary.
@@ -58,4 +59,20 @@ type CrawlerConfig struct {
 	RateLimitRPS float64  `mapstructure:"CRAWLER_RATE_LIMIT_RPS"`
 	MaxRetries   int      `mapstructure:"CRAWLER_MAX_RETRIES"`
 	UserAgents   []string `mapstructure:"CRAWLER_USER_AGENTS"`
+}
+
+// ProcessorConfig holds storage-growth limits enforced by the processor binary:
+// a hard cap on total stored jobs and a retention cleanup cron. These keep the
+// dataset bounded on small/self-hosted deployments.
+type ProcessorConfig struct {
+	// MaxTotalJobs is the hard cap on rows in the jobs table. 0 = unlimited.
+	// When reached, the processor pauses inserts (soft, self-healing — inserts
+	// resume once cleanup drops the count below the cap).
+	MaxTotalJobs int64 `mapstructure:"MAX_TOTAL_JOBS"`
+	// CleanupEnabled toggles the retention cron.
+	CleanupEnabled bool `mapstructure:"CLEANUP_ENABLED"`
+	// CleanupSchedule is a cron expression (robfig/cron) for the cleanup job.
+	CleanupSchedule string `mapstructure:"CLEANUP_SCHEDULE"`
+	// CleanupRetentionDays deletes jobs whose created_at is older than this many days.
+	CleanupRetentionDays int `mapstructure:"CLEANUP_RETENTION_DAYS"`
 }
