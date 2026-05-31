@@ -93,11 +93,14 @@ Migrations run automatically on api/processor startup.
 ## 5. Get the public URL
 
 ```bash
-# Either read the ngrok inspector API…
-curl -s http://127.0.0.1:4040/api/tunnels | grep -o '"public_url":"[^"]*' | head -1
-# …or check the logs:
+docker logs jobcrawler-ngrok | grep -o 'url=https://[^ ]*' | tail -1
+# or just read the full log:
 docker logs jobcrawler-ngrok
 ```
+
+> The inspector port (4040) is intentionally not published — it clashed with a
+> host-run ngrok. To browse the request inspector, exec a curl inside the
+> container or temporarily add a `ports:` mapping.
 
 You'll get an `https://<random>.ngrok-free.app` URL.
 
