@@ -40,16 +40,16 @@ in the compose file). 2 vCPU and ~10 GB disk is comfortable.
    "Build and push images" run succeeds (4 images: api, crawler, processor, scheduler).
 3. The images appear under your profile **Packages** as
    `ghcr.io/qbert18/jobcrawler-<service>`.
-4. **Access for the server:**
-   - *Easiest:* open each package's settings → **Change visibility → Public**. No
-     login needed on the server.
-   - *Private:* create a GitHub **Personal Access Token** (classic) with
-     `read:packages`, then on the server run:
-     ```bash
-     echo "<TOKEN>" | docker login ghcr.io -u qbert18 --password-stdin
-     ```
-     This writes `~/.docker/config.json`, which the Watchtower service mounts to
-     pull updates.
+4. **Access for the server — make the packages public (recommended):**
+   open each package's settings → **Change visibility → Public**. Then neither the
+   server nor Watchtower needs any registry login — the prod compose mounts no docker
+   credentials.
+   - *Private alternative:* create a GitHub **Personal Access Token** (classic) with
+     `read:packages` and `docker login ghcr.io -u qbert18` on the server, then add a
+     credentials mount to the `watchtower` service —
+     `${HOME}/.docker:/config:ro` plus env `DOCKER_CONFIG=/config`. (Do **not**
+     bind-mount the single `config.json` file — if it's missing Docker creates it as
+     a directory and breaks the docker CLI.)
 
 > The repo is git-flow: `develop` is the default branch, `main` is for releases.
 > Deploys happen when you push/merge to `main`.
@@ -101,6 +101,10 @@ docker logs jobcrawler-ngrok
 > The inspector port (4040) is intentionally not published — it clashed with a
 > host-run ngrok. To browse the request inspector, exec a curl inside the
 > container or temporarily add a `ports:` mapping.
+>
+> The ngrok service runs with `--pooling-enabled`, so if a previous session is
+> still online on the same endpoint it load-balances instead of failing with
+> `ERR_NGROK_334`.
 
 You'll get an `https://<random>.ngrok-free.app` URL.
 
