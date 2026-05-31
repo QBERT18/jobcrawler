@@ -223,10 +223,8 @@ services:
     command: ["http", "jobcrawler-api:8080", "--log=stdout"]
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
-    ports:
-      # Local inspector (tunnel URL, request log) — localhost only.
-      # Host port 4041 to avoid clashing with a host-run ngrok on 4040.
-      - "127.0.0.1:4041:4040"
+    # No host port published — the inspector (4040) clashed with a host-run ngrok.
+    # Read the public URL from the logs instead: docker logs jobcrawler-ngrok
     depends_on:
       - jobcrawler-api
     networks:
