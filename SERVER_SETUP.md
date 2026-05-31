@@ -94,7 +94,7 @@ Migrations run automatically on api/processor startup.
 
 ```bash
 # Either read the ngrok inspector API…
-curl -s http://127.0.0.1:4040/api/tunnels | grep -o '"public_url":"[^"]*' | head -1
+curl -s http://127.0.0.1:4041/api/tunnels | grep -o '"public_url":"[^"]*' | head -1
 # …or check the logs:
 docker logs jobcrawler-ngrok
 ```
