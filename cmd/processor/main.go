@@ -9,6 +9,7 @@ import (
 
 	"github.com/applytude/jobcrawler/config"
 	"github.com/applytude/jobcrawler/internal/crawler"
+	"github.com/applytude/jobcrawler/internal/janitor"
 	"github.com/applytude/jobcrawler/internal/processor"
 	"github.com/applytude/jobcrawler/internal/repository/postgres"
 	"github.com/applytude/jobcrawler/pkg/database"
@@ -54,6 +55,14 @@ func main() {
 	})
 	defer redisClient.Close()
 
+	// ── Kafka topic provisioning ──────────────────────────────────────────────
+	// Auto-creation races the first publish for jobs.processed; provision
+	// explicitly so the producer's metadata cache never sees a negative result.
+	if err := jobkafka.CreateTopics(cfg.Kafka.Brokers); err != nil {
+		logger.Error("kafka topic provisioning failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
 	// ── Kafka ─────────────────────────────────────────────────────────────────
 	consumer := jobkafka.NewConsumer(
 		cfg.Kafka.Brokers,
@@ -80,11 +89,16 @@ func main() {
 		normalizer,
 		registry,
 		nil,
+		cfg.Processor.MaxTotalJobs,
 		logger,
 	)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	// Retention cleanup cron — runs alongside the consumer loop, sharing the
+	// processor's DB connection. Keeps the jobs table bounded over time.
+	go janitor.New(jobRepo, cfg.Processor, logger).Start(ctx)
 
 	logger.Info("processor worker starting",
 		slog.Any("brokers", cfg.Kafka.Brokers),

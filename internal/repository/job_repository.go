@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/applytude/jobcrawler/internal/domain"
 )
@@ -24,4 +25,12 @@ type JobRepository interface {
 
 	// GetStats returns aggregate statistics across all indexed jobs.
 	GetStats(ctx context.Context) (*domain.JobStats, error)
+
+	// Count returns the total number of stored jobs. Used by the processor's
+	// hard-cap enforcement.
+	Count(ctx context.Context) (int64, error)
+
+	// DeleteOlderThan deletes jobs created before cutoff and returns the number
+	// of rows removed. Used by the retention cleanup cron.
+	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }

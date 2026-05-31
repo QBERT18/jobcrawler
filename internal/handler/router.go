@@ -13,6 +13,7 @@ import (
 
 	custommiddleware "github.com/applytude/jobcrawler/internal/handler/middleware"
 	"github.com/applytude/jobcrawler/internal/service"
+	"github.com/applytude/jobcrawler/web"
 )
 
 // Deps holds every dependency the router needs to build all handlers.
@@ -71,6 +72,14 @@ func NewRouter(deps Deps) http.Handler {
 	r.Get("/health", health.Liveness)
 	r.Get("/ready", health.Readiness)
 	r.Handle("/metrics", promhttp.Handler()) // Prometheus scrape endpoint
+
+	// ── Frontend ──────────────────────────────────────────────────────────────
+	// Serve the embedded single-page job browser at the root, same-origin with
+	// the API so it works unchanged behind ngrok/any reverse proxy.
+	r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(web.IndexHTML)
+	})
 
 	// ── API v1 ────────────────────────────────────────────────────────────────
 	r.Route("/api/v1", func(r chi.Router) {

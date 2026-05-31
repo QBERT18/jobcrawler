@@ -20,6 +20,7 @@ func NewRegistry() *SourceRegistry {
 	}
 	r.register(&StepstoneCrawler{})
 	r.register(&XingCrawler{})
+	r.register(&IndeedCrawler{})
 	return r
 }
 

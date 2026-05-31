@@ -24,6 +24,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Ensure required topics exist before the first enqueue. CreateTopics is
+	// idempotent and shared with the processor binary; calling it here removes
+	// the cold-start race where scheduler's initial enqueue beats whichever
+	// binary happens to create the topics first.
+	if err := jobkafka.CreateTopics(cfg.Kafka.Brokers); err != nil {
+		logger.Error("kafka topic provisioning failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
 	producer := jobkafka.NewProducer(cfg.Kafka.Brokers)
 	defer func() {
 		if err := producer.Close(); err != nil {

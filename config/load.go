@@ -39,6 +39,11 @@ func Load() (*Config, error) {
 	v.SetDefault("CRAWLER_RATE_LIMIT_RPS", 0.5)
 	v.SetDefault("CRAWLER_MAX_RETRIES", 3)
 
+	v.SetDefault("MAX_TOTAL_JOBS", 0) // 0 = unlimited
+	v.SetDefault("CLEANUP_ENABLED", true)
+	v.SetDefault("CLEANUP_SCHEDULE", "0 3 * * *") // daily 03:00
+	v.SetDefault("CLEANUP_RETENTION_DAYS", 30)
+
 	// ── .env file (optional, never fatal if missing) ──────────────────────────
 	v.SetConfigFile(".env")
 	v.SetConfigType("env")

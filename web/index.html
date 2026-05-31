@@ -18,10 +18,6 @@
         <h1 class="text-2xl font-semibold tracking-tight">JobCrawler</h1>
         <p id="summary" class="text-sm text-slate-500">Loading&hellip;</p>
       </div>
-      <a href="http://localhost:8081" target="_blank" rel="noopener"
-         class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">
-        Kafka UI &rarr;
-      </a>
     </header>
 
     <!-- Filters -->
@@ -138,7 +134,9 @@
   </template>
 
   <script>
-    const API_BASE = 'http://localhost:8080';
+    // Served same-origin from the API, so all requests are relative — this works
+    // unchanged behind ngrok/any reverse proxy with no mixed-content issues.
+    const API_BASE = '';
 
     const form        = document.getElementById('filter-form');
     const perPageSel  = document.getElementById('per-page');
@@ -303,7 +301,7 @@
 
         renderPagination(data.total || 0, data.page || 1, data.per_page || Number(perPageSel.value), data.total_pages || 0);
       } catch (err) {
-        renderError(`Couldn't load jobs from ${API_BASE}. ${err.message}`);
+        renderError(`Couldn't load jobs. ${err.message}`);
         summaryEl.textContent = 'Offline';
       } finally {
         results.removeAttribute('aria-busy');

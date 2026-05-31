@@ -63,8 +63,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 	addJob("*/30 * * * *", domain.SourceStepstone)
 	addJob("0 */2 * * *", domain.SourceXing)
-	// SourceIndeed is disabled: 403s behind anti-bot, and no parser is
-	// registered. Re-enable with an addJob call once both are addressed.
+	// Indeed sits behind Cloudflare's managed challenge — fetches succeed
+	// only via the uTLS-backed transport in pkg/httputil. Hourly cadence
+	// keeps us comfortably under any per-IP rate threshold while still
+	// surfacing fresh listings.
+	addJob("0 * * * *", domain.SourceIndeed)
 
 	c.Start()
 	s.log.InfoContext(ctx, "scheduler started",
@@ -75,6 +78,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	for _, source := range []domain.JobSource{
 		domain.SourceStepstone,
 		domain.SourceXing,
+		domain.SourceIndeed,
 	} {
 		if err := s.EnqueueSource(ctx, source); err != nil {
 			s.log.ErrorContext(ctx, "initial enqueue failed",
@@ -137,15 +141,15 @@ func (s *Scheduler) generateURLs(source domain.JobSource) []string {
 		return prefixed(stepstoneBase, paths)
 
 	case domain.SourceIndeed:
-		// 5 pages × 10 results = up to 50 jobs per run.
-		var urls []string
-		for start := 0; start <= 40; start += 10 {
-			urls = append(urls, fmt.Sprintf(
-				"%s/jobs?q=software+developer&l=Deutschland&start=%d",
-				indeedBase, start,
-			))
+		// Page 1 only. Indeed punts deep-linked paginated requests
+		// (start=10,20,…) to a captcha+auth wall: those URLs are only
+		// reachable by following the "Next" link from page 1, which carries
+		// session-bound `tk` and `pp` parameters we can't synthesize. Page 1
+		// yields ~15 detail URLs per run, which is sufficient given hourly
+		// cadence.
+		return []string{
+			fmt.Sprintf("%s/jobs?q=software+developer&l=Deutschland", indeedBase),
 		}
-		return urls
 
 	case domain.SourceXing:
 		keywords := []string{

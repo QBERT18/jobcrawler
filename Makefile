@@ -26,7 +26,7 @@ K8S_NS       := jobcrawler
 # Database DSN for local migrations
 LOCAL_DSN    ?= postgres://jobcrawler:secret@localhost:5432/jobcrawler?sslmode=disable
 
-.PHONY: all build test lint clean docker-build push dev dev-down migrate \
+.PHONY: all build test lint clean docker-build push dev dev-stop dev-down migrate \
         k8s-deploy k8s-status k8s-delete scale logs help
 
 # Default target
@@ -121,6 +121,12 @@ dev:
 	@echo "   Kafka:         localhost:9092"
 	@echo "   PostgreSQL:    localhost:5432"
 	@echo "   Redis:         localhost:6379"
+
+## dev-stop: Stop containers without removing them (resume with `make dev`)
+dev-stop:
+	@echo "→ Stopping local stack..."
+	docker compose stop
+	@echo "✓ Stack stopped (containers preserved — run 'make dev' to resume)"
 
 ## dev-down: Stop and remove all containers and volumes
 dev-down:

@@ -26,6 +26,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Kafka topic provisioning ──────────────────────────────────────────────
+	// Idempotent: every binary that talks to Kafka calls this so cold-start
+	// ordering doesn't matter. Avoids "Unknown Topic Or Partition" races on
+	// fresh stacks where this binary may start before the processor.
+	if err := jobkafka.CreateTopics(cfg.Kafka.Brokers); err != nil {
+		logger.Error("kafka topic provisioning failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
 	// ── Kafka ─────────────────────────────────────────────────────────────────
 	consumer := jobkafka.NewConsumer(
 		cfg.Kafka.Brokers,
