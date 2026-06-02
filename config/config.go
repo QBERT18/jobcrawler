@@ -59,6 +59,9 @@ type CrawlerConfig struct {
 	RateLimitRPS float64  `mapstructure:"CRAWLER_RATE_LIMIT_RPS"`
 	MaxRetries   int      `mapstructure:"CRAWLER_MAX_RETRIES"`
 	UserAgents   []string `mapstructure:"CRAWLER_USER_AGENTS"`
+	// MaxListingFanout caps how many detail-URLs one listing page may produce.
+	// Bounds the blast radius of a broken selector. 0 / unset → default (50).
+	MaxListingFanout int `mapstructure:"CRAWLER_MAX_LISTING_FANOUT"`
 }
 
 // ProcessorConfig holds storage-growth limits enforced by the processor binary:

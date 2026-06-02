@@ -38,6 +38,7 @@ func Load() (*Config, error) {
 
 	v.SetDefault("CRAWLER_RATE_LIMIT_RPS", 0.5)
 	v.SetDefault("CRAWLER_MAX_RETRIES", 3)
+	v.SetDefault("CRAWLER_MAX_LISTING_FANOUT", 50)
 
 	v.SetDefault("MAX_TOTAL_JOBS", 0) // 0 = unlimited
 	v.SetDefault("CLEANUP_ENABLED", true)

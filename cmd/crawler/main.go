@@ -81,6 +81,7 @@ func main() {
 		registry,
 		limiter,
 		stats,
+		cfg.Crawler.MaxListingFanout,
 		logger,
 	)
 

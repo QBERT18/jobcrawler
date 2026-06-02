@@ -212,6 +212,9 @@ services:
       REDIS_ADDR:     redis:6379
       KAFKA_BROKERS:  kafka:29092
       KAFKA_GROUP_ID: jobcrawler-crawler
+      # Max detail-URLs one listing page may enqueue. Tune from .env without a
+      # rebuild; the container only sees vars listed here, so it must be wired.
+      CRAWLER_MAX_LISTING_FANOUT: ${CRAWLER_MAX_LISTING_FANOUT:-50}
       # Diagnostic: dump listing HTML into /debug to inspect selectors.
       # Empty (default) disables it; set to /debug locally to enable.
       CRAWLER_DEBUG_DUMP_DIR: ${CRAWLER_DEBUG_DUMP_DIR:-}

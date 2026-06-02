@@ -39,10 +39,11 @@ type failedMessage struct {
 	FailedAt      time.Time `json:"failed_at"`
 }
 
-// maxListingFanout caps how many detail-URLs one listing page may produce.
+// defaultListingFanout caps how many detail-URLs one listing page may produce.
 // Bounds the blast radius of a broken selector that would otherwise match
-// every <a> on the page and enqueue thousands of junk URLs.
-const maxListingFanout = 20
+// every <a> on the page and enqueue thousands of junk URLs. Used when
+// CRAWLER_MAX_LISTING_FANOUT is unset or <= 0.
+const defaultListingFanout = 50
 
 // CrawlerWorker consumes CrawlTask messages from crawl.queue, fetches the
 // target URL, and either (a) publishes raw detail-page HTML to jobs.raw,
@@ -56,6 +57,7 @@ type CrawlerWorker struct {
 	registry   *SourceRegistry
 	limiter    RateLimiter
 	stats      StatsUpdater
+	maxFanout  int
 	log        *slog.Logger
 }
 
@@ -67,8 +69,12 @@ func NewCrawlerWorker(
 	registry *SourceRegistry,
 	limiter RateLimiter,
 	stats StatsUpdater,
+	maxFanout int,
 	log *slog.Logger,
 ) *CrawlerWorker {
+	if maxFanout <= 0 {
+		maxFanout = defaultListingFanout
+	}
 	return &CrawlerWorker{
 		reader:     reader,
 		producer:   producer,
@@ -77,6 +83,7 @@ func NewCrawlerWorker(
 		registry:   registry,
 		limiter:    limiter,
 		stats:      stats,
+		maxFanout:  maxFanout,
 		log:        log,
 	}
 }
@@ -239,8 +246,8 @@ func (w *CrawlerWorker) fanoutListing(
 	}
 
 	trimmed := false
-	if len(urls) > maxListingFanout {
-		urls = urls[:maxListingFanout]
+	if len(urls) > w.maxFanout {
+		urls = urls[:w.maxFanout]
 		trimmed = true
 	}
 
