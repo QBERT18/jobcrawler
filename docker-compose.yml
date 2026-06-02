@@ -22,6 +22,19 @@ name: jobcrawler
 x-database-dsn: &database-dsn
   DATABASE_DSN: postgres://jobcrawler:${POSTGRES_PASSWORD:-secret}@postgres:5432/jobcrawler?sslmode=disable
 
+# Log rotation — caps every container's json-file log so debug spew or a chatty
+# service can never fill the host disk (10m × 3 = 30 MB/service hard ceiling).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# IMPORTANT: defaults below are PRODUCTION-SAFE. Forgetting to set an override in
+# the server's .env must fail safe (info logs, short retention, auto-restart) —
+# never silently into dev mode. The `dev` Makefile target opts into the verbose
+# values; see `make dev`.
+
 services:
 
   # ── Infrastructure (always on) ────────────────────────────────────────────────
@@ -29,7 +42,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: jobcrawler-postgres
-    restart: ${RESTART_POLICY:-no}
+    logging: *default-logging
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
       POSTGRES_DB:       jobcrawler
       POSTGRES_USER:     jobcrawler
@@ -53,7 +67,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: jobcrawler-redis
-    restart: ${RESTART_POLICY:-no}
+    logging: *default-logging
+    restart: ${RESTART_POLICY:-unless-stopped}
     command: >
       redis-server
       --maxmemory 256mb
@@ -75,7 +90,8 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: jobcrawler-zookeeper
-    restart: ${RESTART_POLICY:-no}
+    logging: *default-logging
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME:   2000
@@ -102,7 +118,8 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: jobcrawler-kafka
-    restart: ${RESTART_POLICY:-no}
+    logging: *default-logging
+    restart: ${RESTART_POLICY:-unless-stopped}
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -119,9 +136,9 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME:       PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE:        "true"
-      # Dev keeps 24h; the server lowers this (e.g. 6) to save disk — the queue
-      # is transient. Override via KAFKA_LOG_RETENTION_HOURS in .env.
-      KAFKA_LOG_RETENTION_HOURS:              ${KAFKA_LOG_RETENTION_HOURS:-24}
+      # Prod-safe default: 6h keeps the transient queue small on a tiny disk.
+      # `make dev` raises it to 24h. Override via KAFKA_LOG_RETENTION_HOURS in .env.
+      KAFKA_LOG_RETENTION_HOURS:              ${KAFKA_LOG_RETENTION_HOURS:-6}
       KAFKA_LOG_SEGMENT_BYTES:                1073741824
     volumes:
       - kafka_data:/var/lib/kafka/data
@@ -145,22 +162,23 @@ services:
       context:    .
       dockerfile: docker/api.Dockerfile
     container_name: jobcrawler-api
-    restart: ${RESTART_POLICY:-no}
+    logging: *default-logging
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       # localhost-only; public access on the server goes through ngrok.
       - "127.0.0.1:8080:8080"
     environment:
-      ENV:           ${APP_ENV:-development}
+      ENV:           ${APP_ENV:-production}
       SERVER_HOST:   "0.0.0.0"
       SERVER_PORT:   "8080"
       <<: *database-dsn
       REDIS_ADDR:    redis:6379
       KAFKA_BROKERS: kafka:29092
-      # No colon: an explicit empty value in .env (server) passes through;
-      # only an *unset* var falls back to the dev Elasticsearch address.
-      ES_ADDRESSES:  ${ES_ADDRESSES-http://elasticsearch:9200}
+      # Prod-safe default: empty (Postgres-backed, no ES on the server).
+      # `make dev` points this at the dev Elasticsearch container.
+      ES_ADDRESSES:  ${ES_ADDRESSES-}
       OTLP_ENDPOINT: ""
-      LOG_LEVEL:     ${LOG_LEVEL:-debug}
+      LOG_LEVEL:     ${LOG_LEVEL:-info}
     depends_on:
       postgres:
         condition: service_healthy
@@ -186,9 +204,10 @@ services:
       context:    .
       dockerfile: docker/crawler.Dockerfile
     container_name: jobcrawler-crawler
-    restart: ${RESTART_POLICY:-no}
+    logging: *default-logging
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
-      ENV:            ${APP_ENV:-development}
+      ENV:            ${APP_ENV:-production}
       <<: *database-dsn
       REDIS_ADDR:     redis:6379
       KAFKA_BROKERS:  kafka:29092
@@ -215,15 +234,16 @@ services:
       context:    .
       dockerfile: docker/processor.Dockerfile
     container_name: jobcrawler-processor
-    restart: ${RESTART_POLICY:-no}
+    logging: *default-logging
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
-      ENV:            ${APP_ENV:-development}
+      ENV:            ${APP_ENV:-production}
       <<: *database-dsn
       REDIS_ADDR:     redis:6379
       KAFKA_BROKERS:  kafka:29092
       KAFKA_GROUP_ID: jobcrawler-processor
-      # No colon: explicit empty (server) passes through; unset → dev default.
-      ES_ADDRESSES:   ${ES_ADDRESSES-http://elasticsearch:9200}
+      # Prod-safe default: empty. `make dev` points this at dev Elasticsearch.
+      ES_ADDRESSES:   ${ES_ADDRESSES-}
       # Storage-growth limits (see .env / SERVER_SETUP.md).
       MAX_TOTAL_JOBS:         ${MAX_TOTAL_JOBS:-50000}
       CLEANUP_ENABLED:        ${CLEANUP_ENABLED:-true}
@@ -248,9 +268,10 @@ services:
       context:    .
       dockerfile: docker/scheduler.Dockerfile
     container_name: jobcrawler-scheduler
-    restart: ${RESTART_POLICY:-no}
+    logging: *default-logging
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
-      ENV:           ${APP_ENV:-development}
+      ENV:           ${APP_ENV:-production}
       <<: *database-dsn
       REDIS_ADDR:    redis:6379
       KAFKA_BROKERS: kafka:29092
@@ -268,8 +289,9 @@ services:
   elasticsearch:
     image: elasticsearch:8.11.0
     container_name: jobcrawler-elasticsearch
+    logging: *default-logging
     profiles: [dev]
-    restart: ${RESTART_POLICY:-no}
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
       discovery.type:            single-node
       xpack.security.enabled:    "false"
@@ -295,8 +317,9 @@ services:
   kibana:
     image: kibana:8.11.0
     container_name: jobcrawler-kibana
+    logging: *default-logging
     profiles: [dev]
-    restart: ${RESTART_POLICY:-no}
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "127.0.0.1:5601:5601"
     environment:
@@ -310,8 +333,9 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: jobcrawler-redisinsight
+    logging: *default-logging
     profiles: [dev]
-    restart: ${RESTART_POLICY:-no}
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "127.0.0.1:5540:5540"
     depends_on:
@@ -325,8 +349,9 @@ services:
   ngrok:
     image: ngrok/ngrok:latest
     container_name: jobcrawler-ngrok
+    logging: *default-logging
     profiles: [prod]
-    restart: ${RESTART_POLICY:-no}
+    restart: ${RESTART_POLICY:-unless-stopped}
     # --pooling-enabled: coexist/load-balance with an existing session on the same
     # endpoint instead of failing with ERR_NGROK_334 when a stale tunnel is still up.
     command: ["http", "jobcrawler-api:8080", "--pooling-enabled", "--log=stdout"]
@@ -345,8 +370,9 @@ services:
   watchtower:
     image: containrrr/watchtower:latest
     container_name: jobcrawler-watchtower
+    logging: *default-logging
     profiles: [prod]
-    restart: ${RESTART_POLICY:-no}
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
       WATCHTOWER_CLEANUP:       "true"   # remove old images after updating
       WATCHTOWER_POLL_INTERVAL: "60"     # check GHCR every 60s

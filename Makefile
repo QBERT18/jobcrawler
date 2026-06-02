@@ -109,10 +109,19 @@ push: docker-build
 
 # ── Local development ─────────────────────────────────────────────────────────
 
+# Dev opt-ins: the compose defaults are production-safe (info logs, 6h Kafka
+# retention, no auto-restart loops in your face). These env vars flip the local
+# stack into the verbose, ES-wired dev mode. The server never sets them.
+DEV_ENV = APP_ENV=development \
+          LOG_LEVEL=debug \
+          RESTART_POLICY=no \
+          KAFKA_LOG_RETENTION_HOURS=24 \
+          ES_ADDRESSES=http://elasticsearch:9200
+
 ## dev: Start the full local stack with Docker Compose (builds app images from source)
 dev:
 	@echo "→ Starting local dev stack..."
-	docker compose --profile dev up -d --build
+	$(DEV_ENV) docker compose --profile dev up -d --build
 	@echo ""
 	@echo "✓ Stack started. Service URLs:"
 	@echo "   API:           http://localhost:8080"
