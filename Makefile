@@ -109,10 +109,10 @@ push: docker-build
 
 # ── Local development ─────────────────────────────────────────────────────────
 
-## dev: Start the full local stack with Docker Compose
+## dev: Start the full local stack with Docker Compose (builds app images from source)
 dev:
 	@echo "→ Starting local dev stack..."
-	docker compose up -d
+	docker compose --profile dev up -d --build
 	@echo ""
 	@echo "✓ Stack started. Service URLs:"
 	@echo "   API:           http://localhost:8080"
@@ -125,22 +125,22 @@ dev:
 ## dev-stop: Stop containers without removing them (resume with `make dev`)
 dev-stop:
 	@echo "→ Stopping local stack..."
-	docker compose stop
+	docker compose --profile dev stop
 	@echo "✓ Stack stopped (containers preserved — run 'make dev' to resume)"
 
 ## dev-down: Stop and remove all containers and volumes
 dev-down:
 	@echo "→ Tearing down local stack..."
-	docker compose down -v
+	docker compose --profile dev down -v
 	@echo "✓ Stack removed (all volumes deleted)"
 
 ## dev-logs: Tail logs from all Docker Compose services
 dev-logs:
-	docker compose logs -f --tail=50
+	docker compose --profile dev logs -f --tail=50
 
 ## dev-ps: Show running Docker Compose services
 dev-ps:
-	docker compose ps
+	docker compose --profile dev ps
 
 # ── Database ──────────────────────────────────────────────────────────────────
 

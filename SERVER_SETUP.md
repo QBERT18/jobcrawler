@@ -7,10 +7,13 @@ Step-by-step guide to run JobCrawler on a self-hosted server with:
   Watchtower auto-pulls and restarts on the server
 - **Bounded storage**: a hard job cap + nightly retention cleanup
 
-The server runs a trimmed stack ([docker-compose.prod.yml](docker-compose.prod.yml)):
-Postgres, Redis, Zookeeper, Kafka, the 4 app services, ngrok and Watchtower.
-Elasticsearch and the observability UIs (Kibana, Kafka-UI, RedisInsight) are **not**
-run on the server — search is Postgres-backed in Phase 1.
+The server and local dev share **one** [docker-compose.yml](docker-compose.yml),
+split by Docker profile. The `prod` profile runs the server stack — Postgres,
+Redis, Zookeeper, Kafka, the 4 app services, ngrok and Watchtower. The
+observability UIs (Elasticsearch, Kibana, RedisInsight) live in the `dev`
+profile and are **not** started on the server — search is Postgres-backed in
+Phase 1. Everything env-specific (restart policy, log level, image tag, Kafka
+retention, …) is driven by the server's `.env`.
 
 > Replace `qbert18` in image paths below if your GitHub owner differs. GHCR image
 > names are always lowercase.
@@ -51,8 +54,8 @@ in the compose file). 2 vCPU and ~10 GB disk is comfortable.
      bind-mount the single `config.json` file — if it's missing Docker creates it as
      a directory and breaks the docker CLI.)
 
-> The repo is git-flow: `develop` is the default branch, `main` is for releases.
-> Deploys happen when you push/merge to `main`.
+> `main` is the only long-lived branch and the default. Deploys happen when you
+> push to `main`.
 
 ---
 
@@ -70,6 +73,16 @@ Edit `.env` and set at least:
 NGROK_AUTHTOKEN=<from https://dashboard.ngrok.com/get-started/your-authtoken>
 POSTGRES_PASSWORD=<a strong password>
 
+# Production overrides (the compose defaults are dev-friendly — these flip it to
+# server behaviour). Without these the stack would run with restart=no,
+# ENV=development, debug logging and try to reach a non-existent Elasticsearch.
+RESTART_POLICY=unless-stopped  # auto-restart containers (dev default: no)
+APP_ENV=production
+LOG_LEVEL=info                 # dev default: debug
+KAFKA_LOG_RETENTION_HOURS=6    # trim the transient queue to save disk (dev: 24)
+ES_ADDRESSES=                  # empty: Postgres-backed search, no ES on the server
+IMAGE_TAG=latest               # GHCR tag Watchtower tracks
+
 # Storage limits (tune to your disk)
 MAX_TOTAL_JOBS=50000          # 0 = unlimited; processor pauses inserts at this count
 CLEANUP_ENABLED=true
@@ -81,12 +94,51 @@ CLEANUP_RETENTION_DAYS=30      # delete jobs older than 30 days
 
 ## 4. Launch
 
+One [docker-compose.yml](docker-compose.yml) drives both environments via Docker
+profiles — pick the matching command.
+
+### ▶ Server (this guide)
+
+Pull prebuilt images from GHCR + start ngrok and Watchtower:
+
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env up -d
-docker compose -f docker-compose.prod.yml ps
+docker compose --profile prod --env-file .env up -d
 ```
 
-Migrations run automatically on api/processor startup.
+### ▶ Local development
+
+Build the app images from source + start the observability UIs:
+
+```bash
+docker compose --profile dev up -d --build
+```
+
+### 🔄 Apply compose changes to a running stack
+
+After editing `docker-compose.yml` or `.env`, re-run `up -d` — Compose
+recreates **only** the services whose config changed. To force every container
+to be recreated regardless, add `--force-recreate`:
+
+```bash
+# Recreate only what changed (normal case)
+docker compose --profile prod --env-file .env up -d
+
+# Force-recreate every container (picks up any change, e.g. env tweaks)
+docker compose --profile prod --env-file .env up -d --force-recreate
+```
+
+> Use the same `--profile dev` / `--profile prod` you launched with. Add
+> `--build` on dev if you also changed app source.
+
+Then check status:
+
+```bash
+docker compose --profile prod ps
+```
+
+The `--profile prod` flag starts the core services plus ngrok and Watchtower,
+and (no `--build`) pulls the prebuilt app images from GHCR. Migrations run
+automatically on api/processor startup.
 
 ---
 
@@ -102,7 +154,7 @@ docker logs jobcrawler-ngrok
 > `http://localhost:4040` (SSH-tunnel from your laptop with
 > `ssh -L 4040:localhost:4040 user@server` if the server is remote). If a
 > host-run ngrok already owns 4040, change the host side of the mapping in
-> [docker-compose.prod.yml](docker-compose.prod.yml) (e.g. `"4041:4040"`).
+> [docker-compose.yml](docker-compose.yml) (e.g. `"4041:4040"`).
 >
 > The ngrok service runs with `--pooling-enabled`, so if a previous session is
 > still online on the same endpoint it load-balances instead of failing with
@@ -154,14 +206,14 @@ docker logs -f jobcrawler-watchtower
 
 ```bash
 nano .env
-docker compose -f docker-compose.prod.yml --env-file .env up -d jobcrawler-processor
+docker compose --profile prod --env-file .env up -d jobcrawler-processor
 ```
 
 **Logs**
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f jobcrawler-processor
-docker compose -f docker-compose.prod.yml logs -f jobcrawler-crawler
+docker compose --profile prod logs -f jobcrawler-processor
+docker compose --profile prod logs -f jobcrawler-crawler
 ```
 
 **Manual cleanup / inspect counts** (psql in the Postgres container)
@@ -173,12 +225,14 @@ docker exec -it jobcrawler-postgres psql -U jobcrawler -d jobcrawler \
   -c "DELETE FROM jobs WHERE created_at < NOW() - INTERVAL '7 days';"
 ```
 
-**Reach the observability UIs (not exposed publicly)** — SSH-tunnel from your laptop
-if you ever start them in the dev stack, e.g. `ssh -L 8081:localhost:8081 user@server`.
+**Reach the observability UIs (not exposed publicly)** — they live in the `dev`
+profile and aren't started on the server. If you ever start one
+(`docker compose --profile dev up -d redisinsight`), SSH-tunnel to it from your
+laptop, e.g. `ssh -L 5540:localhost:5540 user@server`.
 
 **Stop / tear down**
 
 ```bash
-docker compose -f docker-compose.prod.yml down            # stop, keep data
-docker compose -f docker-compose.prod.yml down -v         # stop + delete volumes (DESTROYS DB)
+docker compose --profile prod down            # stop, keep data
+docker compose --profile prod down -v         # stop + delete volumes (DESTROYS DB)
 ```
