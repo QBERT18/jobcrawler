@@ -98,9 +98,11 @@ docker logs jobcrawler-ngrok | grep -o 'url=https://[^ ]*' | tail -1
 docker logs jobcrawler-ngrok
 ```
 
-> The inspector port (4040) is intentionally not published — it clashed with a
-> host-run ngrok. To browse the request inspector, exec a curl inside the
-> container or temporarily add a `ports:` mapping.
+> The ngrok web inspector is published on host port 4040 — browse requests at
+> `http://localhost:4040` (SSH-tunnel from your laptop with
+> `ssh -L 4040:localhost:4040 user@server` if the server is remote). If a
+> host-run ngrok already owns 4040, change the host side of the mapping in
+> [docker-compose.prod.yml](docker-compose.prod.yml) (e.g. `"4041:4040"`).
 >
 > The ngrok service runs with `--pooling-enabled`, so if a previous session is
 > still online on the same endpoint it load-balances instead of failing with

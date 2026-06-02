@@ -223,10 +223,11 @@ services:
     # --pooling-enabled: coexist/load-balance with an existing session on the same
     # endpoint instead of failing with ERR_NGROK_334 when a stale tunnel is still up.
     command: ["http", "jobcrawler-api:8080", "--pooling-enabled", "--log=stdout"]
+    ports:
+      # ngrok web inspector / local API — http://localhost:4040
+      - "4040:4040"
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
-    # No host port published — the inspector (4040) clashed with a host-run ngrok.
-    # Read the public URL from the logs instead: docker logs jobcrawler-ngrok
     depends_on:
       - jobcrawler-api
     networks:
