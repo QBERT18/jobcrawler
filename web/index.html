@@ -5,41 +5,56 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>JobCrawler — Jobs</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Enable class-based dark mode for the Tailwind CDN build.
+    tailwind.config = { darkMode: 'class' };
+    // Apply the saved (or system) theme before first paint to avoid a flash.
+    (function () {
+      const saved = localStorage.getItem('theme');
+      const dark = saved ? saved === 'dark'
+                         : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.classList.toggle('dark', dark);
+    })();
+  </script>
   <style>
     [x-cloak] { display: none; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900 antialiased">
+<body class="bg-slate-50 text-slate-900 antialiased dark:bg-slate-900 dark:text-slate-100">
   <div class="mx-auto max-w-6xl px-4 py-8">
 
     <!-- Header -->
     <header class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">JobCrawler</h1>
-        <p id="summary" class="text-sm text-slate-500">Loading&hellip;</p>
+        <p id="summary" class="text-sm text-slate-500 dark:text-slate-400">Loading&hellip;</p>
       </div>
+      <button type="button" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode"
+              class="rounded-md border border-slate-300 bg-white p-2 text-base leading-none text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+        <span id="theme-icon">🌙</span>
+      </button>
     </header>
 
     <!-- Filters -->
-    <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
       <form id="filter-form" class="grid grid-cols-1 gap-3 sm:grid-cols-12">
 
         <div class="sm:col-span-6">
-          <label class="mb-1 block text-xs font-medium text-slate-600">Search</label>
+          <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Search</label>
           <input type="text" name="q" placeholder="e.g. golang, devops, mercedes"
-                 class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                 class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500" />
         </div>
 
         <div class="sm:col-span-3">
-          <label class="mb-1 block text-xs font-medium text-slate-600">Location</label>
+          <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Location</label>
           <input type="text" name="location" placeholder="Berlin, Hamburg&hellip;"
-                 class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                 class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500" />
         </div>
 
         <div class="sm:col-span-3">
-          <label class="mb-1 block text-xs font-medium text-slate-600">Remote</label>
+          <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Remote</label>
           <select name="remote"
-                  class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                  class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
             <option value="">Any</option>
             <option value="FULL">Full remote</option>
             <option value="PARTIAL">Partial / hybrid</option>
@@ -48,15 +63,15 @@
         </div>
 
         <div class="sm:col-span-5">
-          <label class="mb-1 block text-xs font-medium text-slate-600">Tags (comma separated)</label>
+          <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Tags (comma separated)</label>
           <input type="text" name="tags" placeholder="golang,kubernetes,java"
-                 class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                 class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500" />
         </div>
 
         <div class="sm:col-span-3">
-          <label class="mb-1 block text-xs font-medium text-slate-600">Source</label>
+          <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Source</label>
           <select name="source" multiple size="4"
-                  class="w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                  class="w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
             <option value="STEPSTONE">Stepstone</option>
             <option value="XING">Xing</option>
             <option value="INDEED">Indeed</option>
@@ -65,15 +80,15 @@
         </div>
 
         <div class="sm:col-span-2">
-          <label class="mb-1 block text-xs font-medium text-slate-600">Min salary (€)</label>
+          <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Min salary (€)</label>
           <input type="number" name="salary_min" min="0" step="1000" placeholder="0"
-                 class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                 class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500" />
         </div>
 
         <div class="sm:col-span-2">
-          <label class="mb-1 block text-xs font-medium text-slate-600">Sort</label>
+          <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Sort</label>
           <select name="sort"
-                  class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                  class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
             <option value="published_at:desc">Newest first</option>
             <option value="published_at:asc">Oldest first</option>
             <option value="created_at:desc">Recently crawled</option>
@@ -82,17 +97,17 @@
 
         <div class="flex items-end gap-2 sm:col-span-12">
           <button type="submit"
-                  class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
+                  class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-slate-800">
             Apply filters
           </button>
           <button type="button" id="reset-btn"
-                  class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
             Reset
           </button>
-          <div class="ml-auto flex items-center gap-2 text-xs text-slate-500">
+          <div class="ml-auto flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <label for="per-page">Per page</label>
             <select id="per-page" name="per_page"
-                    class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs focus:outline-none">
+                    class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
               <option>10</option>
               <option selected>25</option>
               <option>50</option>
@@ -112,21 +127,21 @@
   </div>
 
   <template id="card-tpl">
-    <article class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+    <article class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0">
-          <a class="block text-base font-semibold text-indigo-700 hover:underline" data-field="title-link" target="_blank" rel="noopener noreferrer"></a>
-          <p class="mt-0.5 truncate text-sm text-slate-700" data-field="company"></p>
-          <p class="text-xs text-slate-500" data-field="location"></p>
+          <a class="block text-base font-semibold text-indigo-700 hover:underline dark:text-indigo-400" data-field="title-link" target="_blank" rel="noopener noreferrer"></a>
+          <p class="mt-0.5 truncate text-sm text-slate-700 dark:text-slate-300" data-field="company"></p>
+          <p class="text-xs text-slate-500 dark:text-slate-400" data-field="location"></p>
         </div>
         <div class="flex flex-col items-end gap-1">
-          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600" data-field="source"></span>
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-300" data-field="source"></span>
           <span class="rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide" data-field="remote"></span>
         </div>
       </div>
-      <p class="mt-3 line-clamp-3 text-sm text-slate-600" data-field="description"></p>
+      <p class="mt-3 line-clamp-3 text-sm text-slate-600 dark:text-slate-400" data-field="description"></p>
       <div class="mt-3 flex flex-wrap gap-1" data-field="tags"></div>
-      <div class="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+      <div class="mt-3 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
         <span data-field="salary"></span>
         <span data-field="published"></span>
       </div>
@@ -144,6 +159,19 @@
     const pagination  = document.getElementById('pagination');
     const summaryEl   = document.getElementById('summary');
     const cardTpl     = document.getElementById('card-tpl');
+
+    // ── Theme toggle ──────────────────────────────────────────────────────────
+    const themeToggle = document.getElementById('theme-toggle');
+    const themeIcon   = document.getElementById('theme-icon');
+    function syncThemeIcon() {
+      themeIcon.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+    }
+    syncThemeIcon();
+    themeToggle.addEventListener('click', () => {
+      const dark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', dark ? 'dark' : 'light');
+      syncThemeIcon();
+    });
 
     let currentPage = 1;
 
@@ -174,10 +202,10 @@
 
     function remoteBadgeClass(remote) {
       switch (remote) {
-        case 'FULL':    return 'bg-emerald-100 text-emerald-700';
-        case 'PARTIAL': return 'bg-amber-100 text-amber-700';
-        case 'NONE':    return 'bg-slate-100 text-slate-600';
-        default:        return 'bg-slate-100 text-slate-600';
+        case 'FULL':    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+        case 'PARTIAL': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+        case 'NONE':    return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+        default:        return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
       }
     }
 
@@ -216,7 +244,7 @@
       const tagsEl = node.querySelector('[data-field="tags"]');
       (job.Tags || []).slice(0, 12).forEach(t => {
         const chip = document.createElement('span');
-        chip.className = 'rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700';
+        chip.className = 'rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300';
         chip.textContent = t;
         tagsEl.appendChild(chip);
       });
@@ -232,7 +260,7 @@
       if (!total) return;
 
       const info = document.createElement('span');
-      info.className = 'text-slate-500';
+      info.className = 'text-slate-500 dark:text-slate-400';
       const from = (page - 1) * perPage + 1;
       const to   = Math.min(page * perPage, total);
       info.textContent = `Showing ${from}–${to} of ${total}`;
@@ -243,17 +271,17 @@
 
       const prev = document.createElement('button');
       prev.textContent = '← Prev';
-      prev.className = 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed';
+      prev.className = 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700';
       prev.disabled = page <= 1;
       prev.addEventListener('click', () => { currentPage = page - 1; fetchAndRender(); });
 
       const pageInfo = document.createElement('span');
-      pageInfo.className = 'text-slate-600';
+      pageInfo.className = 'text-slate-600 dark:text-slate-300';
       pageInfo.textContent = `Page ${page} / ${totalPages || 1}`;
 
       const next = document.createElement('button');
       next.textContent = 'Next →';
-      next.className = 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed';
+      next.className = 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700';
       next.disabled = page >= totalPages;
       next.addEventListener('click', () => { currentPage = page + 1; fetchAndRender(); });
 
@@ -264,7 +292,7 @@
     function renderError(msg) {
       results.innerHTML = '';
       const box = document.createElement('div');
-      box.className = 'rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700';
+      box.className = 'rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300';
       box.textContent = msg;
       results.appendChild(box);
     }
@@ -272,7 +300,7 @@
     function renderEmpty() {
       results.innerHTML = '';
       const box = document.createElement('div');
-      box.className = 'rounded-md border border-slate-200 bg-white p-8 text-center text-slate-500';
+      box.className = 'rounded-md border border-slate-200 bg-white p-8 text-center text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400';
       box.textContent = 'No jobs match your filters.';
       results.appendChild(box);
     }
