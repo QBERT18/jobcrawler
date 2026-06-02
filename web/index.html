@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>JobCrawler — Jobs</title>
+  <title>JobCrawler</title>
+  <!-- Inline SVG favicon (indigo briefcase) — self-contained, no extra route. -->
+  <link rel="icon" type="image/svg+xml"
+        href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="%234f46e5"/><path d="M11 11V9.5A2.5 2.5 0 0 1 13.5 7h5A2.5 2.5 0 0 1 21 9.5V11h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2zm2 0h6V9.5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0-.5.5z" fill="white"/></svg>' />
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     // Enable class-based dark mode for the Tailwind CDN build.
@@ -30,8 +33,8 @@
         <p id="summary" class="text-sm text-slate-500 dark:text-slate-400">Loading&hellip;</p>
       </div>
       <button type="button" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode"
-              class="rounded-md border border-slate-300 bg-white p-2 text-base leading-none text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-        <span id="theme-icon">🌙</span>
+              class="rounded-md border border-slate-300 bg-white p-2 text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+        <span id="theme-icon" class="block h-5 w-5"></span>
       </button>
     </header>
 
@@ -163,8 +166,12 @@
     // ── Theme toggle ──────────────────────────────────────────────────────────
     const themeToggle = document.getElementById('theme-toggle');
     const themeIcon   = document.getElementById('theme-icon');
+    // Feather-style line icons; stroke inherits the button's currentColor.
+    const SUN_ICON  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+    const MOON_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
     function syncThemeIcon() {
-      themeIcon.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+      // In dark mode show the sun (switch to light); in light show the moon.
+      themeIcon.innerHTML = document.documentElement.classList.contains('dark') ? SUN_ICON : MOON_ICON;
     }
     syncThemeIcon();
     themeToggle.addEventListener('click', () => {
